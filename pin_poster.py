@@ -17,6 +17,8 @@ ETSY_LINKS_FILE = os.path.join(os.path.dirname(__file__), "etsy_links.json")
 
 PINTEREST_TOKEN = os.environ.get("PINTEREST_ACCESS_TOKEN")
 PINTEREST_BOARD = os.environ.get("PINTEREST_BOARD_ID")
+INSTAGRAM_TOKEN = os.environ.get("INSTAGRAM_ACCESS_TOKEN")
+INSTAGRAM_ACCOUNT = os.environ.get("INSTAGRAM_BUSINESS_ACCOUNT_ID")
 
 
 def log(msg):
@@ -176,6 +178,42 @@ def post_to_pinterest(title, description, image_path, link):
     return resp.json()
 
 
+def post_to_instagram(title, description, image_path, link):
+    if not INSTAGRAM_TOKEN or not INSTAGRAM_ACCOUNT:
+        log("INSTAGRAM: токен не задан, пропускаю")
+        return None
+
+    API_URL = "https://graph.facebook.com/v18.0"
+
+    with open(image_path, "rb") as f:
+        img_b64 = base64.b64encode(f.read()).decode()
+
+    img_data = base64.b64decode(img_b64)
+
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+        tmp.write(img_data)
+        tmp_path = tmp.name
+
+    with open(tmp_path, "rb") as f:
+        resp = requests.post(
+            f"{API_URL}/{INSTAGRAM_ACCOUNT}/media",
+            files={"file": ("image.jpg", f, "image/jpeg")},
+            data={"access_token": INSTAGRAM_TOKEN, "caption": f"{title}\n\n{description}"},
+        )
+
+    os.unlink(tmp_path)
+    resp.raise_for_status()
+    container_id = resp.json()["id"]
+
+    resp = requests.post(
+        f"{API_URL}/{INSTAGRAM_ACCOUNT}/media_publish",
+        data={"creation_id": container_id, "access_token": INSTAGRAM_TOKEN},
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 def get_posted():
     posted = set()
     if os.path.exists(POSTED_LOG):
@@ -230,11 +268,21 @@ def post_one():
     try:
         result = post_to_pinterest(pin_data["title"], pin_data["description"], image_path, link)
         log(f"PINTEREST: OK! ID: {result.get('id', 'ok')}")
-        mark_posted(pin_num)
-        return True
     except Exception as e:
-        log(f"ОШИБКА: {e}")
+        log(f"PINTEREST ОШИБКА: {e}")
         return False
+
+    try:
+        result = post_to_instagram(pin_data["title"], pin_data["description"], image_path, link)
+        if result:
+            log(f"INSTAGRAM: OK!")
+        else:
+            log(f"INSTAGRAM: пропущен (нет токена)")
+    except Exception as e:
+        log(f"INSTAGRAM ОШИБКА: {e}")
+
+    mark_posted(pin_num)
+    return True
 
 
 def show_status():
