@@ -1,0 +1,35 @@
+name: Pinterest Auto Post
+
+on:
+  schedule:
+    # Каждый час с 14:00 до 04:00 Киев (UTC+3 = UTC 11:00-01:00)
+    - cron: '0 11-23 * * *'  # 14:00-02:00 Киев
+    - cron: '0 0-1 * * *'   # 03:00-04:00 Киев
+  workflow_dispatch:
+
+jobs:
+  post-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests python-dotenv
+
+      - name: Download pins folder
+        uses: actions/download-artifact@v4
+        with:
+          name: pins-data
+          path: pins_data
+        continue-on-error: true
+
+      - name: Post one pin
+        env:
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_BOARD_ID: ${{ secrets.PINTEREST_BOARD_ID }}
+          ETSY_SHOP_URL: ${{ secrets.ETSY_SHOP_URL }}
+        run: python pin_poster.py scheduled
